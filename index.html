@@ -406,9 +406,11 @@ node_toString(AST)
 const text_CenterImgSrchCoords=`
 CenterImgSrchCoords(&OutputVarX, &OutputVarY, X1, Y1, X2, Y2, ImageFile) {
     ret:=ImageSearch(&OutputVarX, &OutputVarY, X1, Y1, X2, Y2, ImageFile)
-    Gui().AddPicture(,ImageFile).GetPos(,,&Width,&Height)
-    OutputVarX += Width // 2
-	OutputVarY += Height // 2
+    if (ret) {
+        Gui().AddPicture(,ImageFile).GetPos(,,&Width,&Height)
+        OutputVarX += Width // 2
+        OutputVarY += Height // 2
+    }
     return ret
 }`
 
