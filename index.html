@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pmc_to_ahkv2</title>
+</head>
+<body>
+<script>
+function create_textarea(label_text) {
+    const label = document.createElement("label")
+    label.textContent = label_text
+    const textarea = document.createElement("textarea")
+    textarea.setAttribute("cols",50)
+    textarea.setAttribute("rows",15)
+    textarea.style.display = "block"
+    label.append(textarea)
+    return [label,textarea]
+}
+function horizontal_div(...children) {
+    const div = document.createElement("div")
+    div.style.display = "flex"
+    div.append(...children)
+    return div
+}
+const [pmc_label, pmc_textarea] = create_textarea("pmc")
+const [ahkv2_label, ahkv2_textarea] = create_textarea("ahkv2")
+
+pmc_textarea.addEventListener('dragover', function (e) {
+    e.stopPropagation()
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+})
+pmc_textarea.addEventListener('drop', function (e) {
+    e.stopPropagation()
+    e.preventDefault()
+    const files = e.dataTransfer.files // Array of all files
+    if (files.length) {
+        const reader = new FileReader();
+
+        reader.onload = function(evt) {
+            if(evt.target.readyState != 2) return;
+            if(evt.target.error) {
+                alert('Error while reading file');
+                return;
+            }
+
+            got_pmc_data(evt.target.result)
+            pmc_textarea.value = evt.target.result
+        };
+
+        reader.readAsText(files[0]);
+    }
+})
+
+function p(p_text,a_text) {
+    const p_element = document.createElement("p")
+    p_element.textContent = p_text
+    if (a_text) {
+        const a = document.createElement("a")
+        a.textContent = a_text
+        a.setAttribute("href",a_text)
+        p_element.append(a)
+    }
+    return p_element
+}
+
+pmc_textarea.addEventListener("paste",function handlePaste(e) {
+    setTimeout(() => {
+        got_pmc_data(e.target.value)
+    }, 1)
+})
+
+function got_pmc_data(pmc_data) {
+    ahkv2_textarea.value = pmc_to_ahkv2(pmc_data)
+}
+
+document.body.append(horizontal_div(pmc_label,ahkv2_label))
+document.body.append(p("bug reports: ","https://github.com/FuPeiJiang/pmc_to_ahkv2/issues"))
+document.body.append(p("only pasting is supported, incremental typing is not supported"))
+document.body.append(p("you can also drag-and-drop a .pmc file into the pmc textarea"))
+
+function pmc_to_ahkv2(pmc_data) {
+const lines = pmc_data.replace(/[\uFEFF\r]/g,"").split("\n")
+
+const statements_arr = []
+let current_statements = []
+const AST = {type:"script",statements:current_statements}
+
+let must_include_CenterImgSrchCoords = false
+
+let i = 0
+while (i < lines.length) {
+    const line = lines[i]
+
+    if (line.startsWith("[PMC Code")) {
+        const [PMC_Code,hotkey,idk1,idk2,speeds,idk3,funcName] = line.split("|")
+        statements_arr.push(current_statements)
+        current_statements=[]
+        statements_arr[statements_arr.length-1].push({type:"hotkey",hotkey,funcName,block:[{type:"loop",expression:{type:"number",text:"1"},block:current_statements}]})
+        i+=3
+        while (i < lines.length) {
+            const line = lines[i]
+            if (!line.length) {
+                ++i
+                break
+            }
+            const [rowNum,Action,Details,Repeat,Delay,Type,MsgBoxIcon,CoordMode] = line.split("|")
+            if (rowNum.startsWith("0")) { //row is disabled
+                ++i
+                continue
+            }
+            switch (Type) {
+                case "If_Statement":
+                    let expression
+                    switch (Action) {
+                        case "If Window Active":
+                            expression={type:"call",expression:{type:"identifier",text:"WinActive"},args:[{type:"string",text:Details}]}
+                            break;
+                        case "If Image/Pixel Found":
+                            expression={type:"unary",op:"!",right:{type:"identifier",text:"ErrorLevel"}}
+                            break;
+                        case "If Image/Pixel Not Found":
+                            expression={type:"identifier",text:"ErrorLevel"}
+                            break;
+                        case "[End If]":
+                            current_statements=statements_arr.pop()
+                            break;
+                        case "[Else]":
+                            current_statements=[]
+                            const last_statements = statements_arr[statements_arr.length-1]
+                            last_statements[last_statements.length-1].else_block=current_statements
+                            break;
+                        case "If Message Box":
+                            expression={type:"binary",op:"==",left:{type:"identifier",text:"IfMsgBox"},right:{type:"string",Details}}
+                            break;
+                        default:
+                            debugger
+                    }
+                    if (expression) {
+                        statements_arr.push(current_statements)
+                        current_statements=[]
+                        statements_arr[statements_arr.length-1].push({type:"if",expression,if_block:current_statements})
+                    }
+                    break;
+                case "ImageSearch":
+                    const [onFail, onSuccess, OutputVarX, OutputVarY, doCenterImgSrchCoords] = Action.split(", ")
+                    if (doCenterImgSrchCoords==="1") {
+                        must_include_CenterImgSrchCoords = true
+                    }
+                    const [X1, Y1, X2, Y2, ImageFile] = Details.split(", ")
+                    current_statements.push({type:"call",expression:{type:"identifier",text:"CoordMode"},args:[{type:"string",text:"Pixel"},{type:"string",text:CoordMode}]})
+                    const ImageSearch_assign = {type:"binary",op:":=",left:{type:"identifier",text:"ErrorLevel"},right:{type:"unary",op:"!",right:{type:"call",expression:{type:"identifier",text:doCenterImgSrchCoords==="1" ? "CenterImgSrchCoords" : "ImageSearch"},args:[{type:"unary",op:"&",right:{type:"identifier",text:OutputVarX}},{type:"unary",op:"&",right:{type:"identifier",text:OutputVarY}},{type:"number",text:X1},{type:"number",text:Y1},{type:"number",text:X2},{type:"number",text:Y2},{type:"string",text:ImageFile}]}}}
+                    switch (onFail) {
+                        case "Continue":
+                            current_statements.push(ImageSearch_assign)
+                            break;
+                        case "Break":
+                            current_statements.push({type:"if",expression:ImageSearch_assign,if_block:[{type:"break"}]})
+                            break;
+                        case "Left Click":
+                            current_statements.push({type:"if",expression:ImageSearch_assign,if_block:[{type:"call",expression:{type:"identifier",text:"Click"},args:[{type:"identifier",text:OutputVarX},{type:"identifier",text:OutputVarY}]}]})
+                            break;
+                        default:
+                            debugger
+                    }
+                    switch (onSuccess) {
+                        case "Continue":
+                            break;
+                        default:
+                            debugger
+                    }
+                    break;
+                case "Click":
+                    switch (Action) {
+                        case "Left Move & Click":
+                            //const [X, bad, clickCount] = Details.split(", ")
+                            //let Y, Button
+                            //switch (bad.slice(-5)) {
+                            //    case " Left":Y = bad.slice(0,-5);Button="Left";break
+                            //    case "Right":Y = bad.slice(0,-6);Button="Right";break
+                            //    case "Middle":Y = bad.slice(0,-6);Button="Middle";break
+                            //    default:
+                            //        debugger
+                            //}
+                            //current_statements.push({type:"call",expression:{type:"identifier",text:"Click"},args:[escape_v1(X),escape_v1(Y),{type:"string",text:Button},{type:"number",text:clickCount}]})
+                        case "Mouse Wheel Down":
+                        case "Mouse Wheel Up":
+                            if (Repeat!=="1") {
+                                statements_arr.push(current_statements)
+                                current_statements=[]
+                                statements_arr[statements_arr.length-1].push({type:"loop",expression:{type:"number",text:Repeat},block:current_statements})
+                            }
+                            current_statements.push({type:"call",expression:{type:"identifier",text:"Click"},args:[escape_v1(Details)]})
+                            if (Delay!=="0") {
+                                current_statements.push({type:"call",expression:{type:"identifier",text:"Sleep"},args:[{type:"number",text:Delay}]})
+                            }
+                            if (Repeat!=="1") {
+                                current_statements=statements_arr.pop()
+                            }
+                            break;
+                        default:
+                            debugger
+                    }
+                    break;
+                case "Sleep":
+                    current_statements.push({type:"call",expression:{type:"identifier",text:"Sleep"},args:[{type:"number",text:Delay}]})
+                    break;
+                case "Loop":
+                    switch (Action) {
+                        case "[LoopStart]":
+                            statements_arr.push(current_statements)
+                            current_statements=[]
+                            statements_arr[statements_arr.length-1].push({type:"loop",expression:{type:"number",text:Repeat},block:current_statements})
+                            break;
+                        case "[LoopEnd]":
+                            current_statements=statements_arr.pop()
+                            break;
+                        default:
+                            debugger
+                    }
+                    break;
+                case "While":
+                    switch (Action) {
+                        case "[LoopStart]":
+                            statements_arr.push(current_statements)
+                            current_statements=[]
+                            statements_arr[statements_arr.length-1].push({type:"while",expression:{type:"as is",text:Details},block:current_statements})
+                            break;
+                        default:
+                            debugger
+                    }
+                    break;
+                case "Variable":
+                    switch (Action) {
+                        case "[Assign Variable]":
+                            const first_space = Details.indexOf(" ")
+                            const second_space = Details.indexOf(" ",first_space+1)
+                            const op = Details.slice(first_space+1,second_space)
+                            const left = Details.slice(0,first_space)
+                            const right = Details.slice(second_space+1)
+                            current_statements.push({type:"binary",op,left:{type:"identifier",text:left},right:escape_expr(right)})
+                            break;
+                        default:
+                            debugger
+                    }
+                    break;
+                case "SendEvent":
+                    switch (Action) {
+                        case "Left Click & Drag":
+                        case "Left Move & Click":
+                            current_statements.push({type:"call",expression:{type:"identifier",text:"SendEvent"},args:[escape_v1(Details)]})
+                            if (Delay!=="0") {
+                                current_statements.push({type:"call",expression:{type:"identifier",text:"Sleep"},args:[{type:"number",text:Delay}]})
+                            }
+                            break;
+                        default:
+                            debugger
+                    }
+                    break;
+                case "Send":
+                    if (Repeat!=="1") {
+                        statements_arr.push(current_statements)
+                        current_statements=[]
+                        statements_arr[statements_arr.length-1].push({type:"loop",expression:{type:"number",text:Repeat},block:current_statements})
+                    }
+                    current_statements.push({type:"call",expression:{type:"identifier",text:"Send"},args:[escape_v1(Details)]})
+                    if (Delay!=="0") {
+                        current_statements.push({type:"call",expression:{type:"identifier",text:"Sleep"},args:[{type:"number",text:Delay}]})
+                    }
+                    if (Repeat!=="1") {
+                        current_statements=statements_arr.pop()
+                    }
+                    break;
+                case "Break":
+                    current_statements.push({type:"break"})
+                    break;
+                case "WinActivate":
+                    current_statements.push({type:"call",expression:{type:"identifier",text:"WinActivate"},args:[escape_v1(CoordMode)]})
+                    if (Delay!=="0") {
+                        current_statements.push({type:"call",expression:{type:"identifier",text:"Sleep"},args:[{type:"number",text:Delay}]})
+                    }
+                    break;
+                case "WinMove":
+                    current_statements.push({type:"call",expression:{type:"identifier",text:"WinMove"},args:[escape_v1(CoordMode)]})
+                    if (Delay!=="0") {
+                        current_statements.push({type:"call",expression:{type:"identifier",text:"Sleep"},args:[{type:"number",text:Delay}]})
+                    }
+                    break;
+                case "Gosub":
+                    current_statements.push({type:"call",expression:{type:"identifier",text:Details},args:[]})
+                    break;
+                case "MsgBox":
+                    current_statements.push({type:"binary",op:":=",left:{type:"identifier",text:"IfMsgBox"},right:{type:"call",expression:{type:"identifier",text:"MsgBox"},args:[escape_v1(Details),escape_v1(CoordMode),{type:"number",text:MsgBoxIcon}]}})
+                    break;
+                case "WinGet":
+                    const [OutVar, SubCommand] = Details.split(", ")
+                    current_statements.push({type:"binary",op:":=",left:{type:"identifier",text:OutVar},right:{type:"call",expression:{type:"identifier",text:`WinGet${SubCommand}`},args:[escape_v1(CoordMode)]}})
+                    break;
+                default:
+                    debugger
+            }
+            ++i
+        }
+        current_statements=statements_arr.pop()
+    } else {
+        ++i
+    }
+}
+
+function escape_v1(v1_str) {
+    return {type:"as is",text:`"${v1_str.replace(/%(.*?)%/g,`" $1 "`)}"`.replace(/^"" | ""$/g,"")}
+}
+function escape_expr(expr_str) {
+    return {type:"as is",text:expr_str.replace(/%(.*?)%/g,`" $1 "`).replace(/^"" | ""$/g,"")}
+}
+
+const stack = []
+const toJoin = []
+function node_toString(node) {
+    switch (node.type) {
+        case "script":
+            for (const v of node.statements) {
+                addLine(node_toString(v))
+            }
+            break;
+        case "hotkey":
+            node.hotkey && addLine(`${node.hotkey}::`)
+            addLine(`${node.funcName}() {`)
+            stack.push(node)
+            addLine("global")
+            for (const v of node.block) {
+                addLine(node_toString(v))
+            }
+            stack.pop()
+            addLine(`}`)
+            break;
+        case "loop":
+            addLine(`loop ${node_toString(node.expression)} {`)
+            stack.push(node)
+            for (const v of node.block) {
+                addLine(node_toString(v))
+            }
+            stack.pop()
+            addLine(`}`)
+            break;
+        case "while":
+            addLine(`while (${node_toString(node.expression)}) {`)
+            stack.push(node)
+            for (const v of node.block) {
+                addLine(node_toString(v))
+            }
+            stack.pop()
+            addLine(`}`)
+            break;
+        case "if":
+            addLine(`if (${node_toString(node.expression)}) {`)
+            stack.push(node)
+            for (const v of node.if_block) {
+                addLine(node_toString(v))
+            }
+            stack.pop()
+            if (node.else_block) {
+                addLine(`} else {`)
+                stack.push(node)
+                for (const v of node.else_block) {
+                    addLine(node_toString(v))
+                }
+                stack.pop()
+            }
+            addLine(`}`)
+            break;
+        case "string":
+            return `"${node.text}"`
+        case "number":
+        case "identifier":
+        case "as is":
+            return node.text
+        case "call":
+            return `${node_toString(node.expression)}(${node.args.map(v=>node_toString(v)).join(", ")})`
+        case "binary":
+            return `${node_toString(node.left)}${node.op}${node_toString(node.right)}`
+        case "unary":
+            return `${node.op}${node_toString(node.right)}`
+        case "break":
+            addLine(`break`)
+            break;
+        default:
+            debugger
+    }
+    function addLine(text) {
+        text && toJoin.push(`${"    ".repeat(stack.length)}${text}`)
+    }
+}
+node_toString(AST)
+
+const text_CenterImgSrchCoords=`
+CenterImgSrchCoords(&OutputVarX, &OutputVarY, X1, Y1, X2, Y2, ImageFile) {
+    ret:=ImageSearch(&OutputVarX, &OutputVarY, X1, Y1, X2, Y2, ImageFile)
+    Gui().AddPicture(,ImageFile).GetPos(,,&Width,&Height)
+    OutputVarX += Width // 2
+	OutputVarY += Height // 2
+    return ret
+}`
+
+const output = `${toJoin.join("\n")}${must_include_CenterImgSrchCoords ? text_CenterImgSrchCoords : ""}`
+return output
+}
+</script>
+</body>
+</html>
