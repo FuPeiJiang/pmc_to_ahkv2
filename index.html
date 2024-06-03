@@ -282,7 +282,7 @@ while (i < lines.length) {
                     }
                     break;
                 case "WinMove":
-                    current_statements.push({type:"call",expression:{type:"identifier",text:"WinMove"},args:[escape_v1(CoordMode)]})
+                    current_statements.push({type:"call",expression:{type:"identifier",text:"WinMove"},args:[...Details.split(", ").map(v=>escape_expr(v)),escape_v1(CoordMode)]})
                     if (Delay!=="0") {
                         current_statements.push({type:"call",expression:{type:"identifier",text:"Sleep"},args:[{type:"number",text:Delay}]})
                     }
