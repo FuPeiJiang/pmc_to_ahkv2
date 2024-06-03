@@ -132,7 +132,7 @@ while (i < lines.length) {
                             last_statements[last_statements.length-1].else_block=current_statements
                             break;
                         case "If Message Box":
-                            expression={type:"binary",op:"==",left:{type:"identifier",text:"IfMsgBox"},right:{type:"string",Details}}
+                            expression={type:"binary",op:"==",left:{type:"identifier",text:"IfMsgBox"},right:{type:"string",text:Details}}
                             break;
                         default:
                             debugger
