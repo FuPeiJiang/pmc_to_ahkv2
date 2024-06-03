@@ -158,6 +158,9 @@ while (i < lines.length) {
                         case "Break":
                             current_statements.push({type:"if",expression:ImageSearch_assign,if_block:[{type:"break"}]})
                             break;
+                        case "Stop":
+                            current_statements.push({type:"if",expression:ImageSearch_assign,if_block:[{type:"return"}]})
+                            break;
                         case "Left Click":
                             current_statements.push({type:"if",expression:ImageSearch_assign,if_block:[{type:"call",expression:{type:"identifier",text:"Click"},args:[{type:"identifier",text:OutputVarX},{type:"identifier",text:OutputVarY}]}]})
                             break;
@@ -275,6 +278,9 @@ while (i < lines.length) {
                 case "Break":
                     current_statements.push({type:"break"})
                     break;
+                case "Return":
+                    current_statements.push({type:"return"})
+                    break;
                 case "WinActivate":
                     current_statements.push({type:"call",expression:{type:"identifier",text:"WinActivate"},args:[escape_v1(CoordMode)]})
                     if (Delay!=="0") {
@@ -384,6 +390,9 @@ function node_toString(node) {
             return `${node.op}${node_toString(node.right)}`
         case "break":
             addLine(`break`)
+            break;
+        case "return":
+            addLine(`return`)
             break;
         default:
             debugger
