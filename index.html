@@ -326,7 +326,7 @@ function node_toString(node) {
             break;
         case "hotkey":
             node.hotkey && addLine(`${node.hotkey}::`)
-            addLine(`${node.funcName}() {`)
+            addLine(`${node.funcName}(*) {`)
             stack.push(node)
             addLine("global")
             for (const v of node.block) {
