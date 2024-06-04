@@ -115,7 +115,7 @@ while (i < lines.length) {
                     let expression
                     switch (Action) {
                         case "If Window Active":
-                            expression={type:"call",expression:{type:"identifier",text:"WinActive"},args:[{type:"string",text:Details}]}
+                            expression={type:"call",expression:{type:"identifier",text:"WinActive"},args:[escape_v1(Details)]}
                             break;
                         case "If Image/Pixel Found":
                             expression={type:"unary",op:"!",right:{type:"identifier",text:"ErrorLevel"}}
