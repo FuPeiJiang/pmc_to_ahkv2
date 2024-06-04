@@ -144,30 +144,30 @@ while (i < lines.length) {
                     }
                     break;
                 case "ImageSearch":
-                    const [onFail, onSuccess, OutputVarX, OutputVarY, doCenterImgSrchCoords] = Action.split(", ")
+                    const [onSuccess, onFail, OutputVarX, OutputVarY, doCenterImgSrchCoords] = Action.split(", ")
                     if (doCenterImgSrchCoords==="1") {
                         must_include_CenterImgSrchCoords = true
                     }
                     const [X1, Y1, X2, Y2, ImageFile] = Details.split(", ")
                     current_statements.push({type:"call",expression:{type:"identifier",text:"CoordMode"},args:[{type:"string",text:"Pixel"},{type:"string",text:CoordMode}]})
                     const ImageSearch_assign = {type:"binary",op:":=",left:{type:"identifier",text:"ErrorLevel"},right:{type:"unary",op:"!",right:{type:"call",expression:{type:"identifier",text:doCenterImgSrchCoords==="1" ? "CenterImgSrchCoords" : "ImageSearch"},args:[{type:"unary",op:"&",right:{type:"identifier",text:OutputVarX}},{type:"unary",op:"&",right:{type:"identifier",text:OutputVarY}},{type:"number",text:X1},{type:"number",text:Y1},{type:"number",text:X2},{type:"number",text:Y2},{type:"string",text:ImageFile}]}}}
-                    switch (onFail) {
+                    switch (onSuccess) {
                         case "Continue":
                             current_statements.push(ImageSearch_assign)
                             break;
                         case "Break":
-                            current_statements.push({type:"if",expression:ImageSearch_assign,if_block:[{type:"break"}]})
+                            current_statements.push({type:"if",expression:{type:"unary",op:"!",right:{type:"group",value:ImageSearch_assign}},if_block:[{type:"break"}]})
                             break;
                         case "Stop":
-                            current_statements.push({type:"if",expression:ImageSearch_assign,if_block:[{type:"return"}]})
+                            current_statements.push({type:"if",expression:{type:"unary",op:"!",right:{type:"group",value:ImageSearch_assign}},if_block:[{type:"return"}]})
                             break;
                         case "Left Click":
-                            current_statements.push({type:"if",expression:ImageSearch_assign,if_block:[{type:"call",expression:{type:"identifier",text:"Click"},args:[{type:"identifier",text:OutputVarX},{type:"identifier",text:OutputVarY}]}]})
+                            current_statements.push({type:"if",expression:{type:"unary",op:"!",right:{type:"group",value:ImageSearch_assign}},if_block:[{type:"call",expression:{type:"identifier",text:"Click"},args:[{type:"identifier",text:OutputVarX},{type:"identifier",text:OutputVarY}]}]})
                             break;
                         default:
                             debugger
                     }
-                    switch (onSuccess) {
+                    switch (onFail) {
                         case "Continue":
                             break;
                         default:
@@ -388,6 +388,8 @@ function node_toString(node) {
             return `${node_toString(node.left)}${node.op}${node_toString(node.right)}`
         case "unary":
             return `${node.op}${node_toString(node.right)}`
+        case "group":
+            return `(${node_toString(node.value)})`
         case "break":
             addLine(`break`)
             break;
