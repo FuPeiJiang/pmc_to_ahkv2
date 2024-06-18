@@ -172,12 +172,16 @@ while (i < lines.length) {
                     switch (onFail) {
                         case "Continue":
                             break;
+                        case "Stop":
+                            current_statements.push({type:"if",expression:{type:"identifier",text:"ErrorLevel"},if_block:[{type:"return"}]})
+                            break;
                         default:
                             debugger; return not_supported(Type, Action)
                     }
                     break;
                 case "Click":
                     switch (Action) {
+                        case "Move":
                         case "Left Move & Click":
                             //const [X, bad, clickCount] = Details.split(", ")
                             //let Y, Button
@@ -277,11 +281,36 @@ while (i < lines.length) {
                         current_statements=statements_arr.pop()
                     }
                     break;
+                case "SendRaw":
+                    switch (Action) {
+                        case "[Text]":
+                            if (Repeat!=="1") {
+                                statements_arr.push(current_statements)
+                                current_statements=[]
+                                statements_arr[statements_arr.length-1].push({type:"loop",expression:{type:"number",text:Repeat},block:current_statements})
+                            }
+                            const escaped = escape_v1(Details)
+                            escaped.text = `"{Raw}" ${escaped.text}`
+                            current_statements.push({type:"call",expression:{type:"identifier",text:"Send"},args:[escaped]})
+                            if (Delay!=="0") {
+                                current_statements.push({type:"call",expression:{type:"identifier",text:"Sleep"},args:[{type:"number",text:Delay}]})
+                            }
+                            if (Repeat!=="1") {
+                                current_statements=statements_arr.pop()
+                            }
+                            break;
+                    default:
+                            debugger; return not_supported(Type, Action)
+                    }
+                    break;
                 case "Break":
                     current_statements.push({type:"break"})
                     break;
                 case "Return":
                     current_statements.push({type:"return"})
+                    break;
+                case "ExitApp":
+                    current_statements.push({type:"ExitApp"})
                     break;
                 case "WinActivate":
                     current_statements.push({type:"call",expression:{type:"identifier",text:"WinActivate"},args:[escape_v1(CoordMode)]})
@@ -305,6 +334,11 @@ while (i < lines.length) {
                     const [OutVar, SubCommand] = Details.split(", ")
                     current_statements.push({type:"binary",op:":=",left:{type:"identifier",text:OutVar},right:{type:"call",expression:{type:"identifier",text:`WinGet${SubCommand}`},args:[escape_v1(CoordMode)]}})
                     break;
+                case "Random":{
+                    const [OutVar, A, B] = Details.split(", ")
+                    current_statements.push({type:"binary",op:":=",left:{type:"identifier",text:OutVar},right:{type:"call",expression:{type:"identifier",text:"Random"},args:[A, B].filter(v=>Boolean(v)).map(v=>escape_expr(v))}})
+                    break;
+                }
                 default:
                     debugger; return not_supported(Type, Action)
             }
@@ -317,10 +351,17 @@ while (i < lines.length) {
 }
 
 function escape_v1(v1_str) {
-    return {type:"as is",text:`"${v1_str.replace(/%(.*?)%/g,`" $1 "`)}"`.replace(/^"" | ""$/g,"")}
+    if (v1_str.match(/^\s*%\s/)) {
+        return {type:"as is",text:v1_str.replace(/^\s*%\s*/,"")}
+    }
+    return {type:"as is",text:`"${v1_str.replace(/"/g,"`\"").replace(/%(.*?)%/g,`" $1 "`)}"`.replace(/^"" | ""$/g,"")}
 }
 function escape_expr(expr_str) {
-    return {type:"as is",text:expr_str.replace(/%(.*?)%/g,`" $1 "`).replace(/^"" | ""$/g,"")}
+    if (!isNaN(expr_str) || expr_str.match(/^\s*".*"\s*$/)) {
+        return {type:"as is",text:expr_str.replace(/%(.*?)%/g,`" $1 "`).replace(/^"" | ""$/g,"")}
+    } else {
+        return escape_v1(expr_str)
+    }
 }
 
 function not_supported(Type, Action) {
@@ -401,6 +442,9 @@ function node_toString(node) {
             break;
         case "return":
             addLine(`return`)
+            break;
+        case "ExitApp":
+            addLine(`ExitApp`)
             break;
         default:
             debugger
